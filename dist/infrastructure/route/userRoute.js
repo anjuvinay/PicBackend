@@ -1,0 +1,23 @@
+"use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = __importDefault(require("express"));
+const authController_1 = __importDefault(require("../controller/authController"));
+const imageController_1 = __importDefault(require("../controller/imageController"));
+const multerConfig_1 = require("../middlewares/multerConfig");
+const authMiddleware_1 = require("../middlewares/authMiddleware");
+const router = express_1.default.Router();
+router.post('/register', authController_1.default.registerUser);
+router.post('/login', authController_1.default.userLogin);
+router.post('/forgot-password', authController_1.default.forgotPassword);
+router.post('/verify-otp', authController_1.default.verifyOtp);
+router.post('/reset-password', authController_1.default.resetPassword);
+router.post('/resend-otp', authController_1.default.otpResend);
+router.post('/upload', authMiddleware_1.authMiddleware, multerConfig_1.uploadFields, imageController_1.default.uploadImages);
+router.get('/images', authMiddleware_1.authMiddleware, imageController_1.default.getImages);
+router.delete('/image', authMiddleware_1.authMiddleware, imageController_1.default.deleteImage);
+router.put('/image', authMiddleware_1.authMiddleware, multerConfig_1.upload.single('image'), imageController_1.default.editImage);
+router.post('/reorder', authMiddleware_1.authMiddleware, imageController_1.default.reorderImages);
+exports.default = router;
