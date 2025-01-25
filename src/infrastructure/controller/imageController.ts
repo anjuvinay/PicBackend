@@ -78,7 +78,7 @@ const getImages = async (req: Request, res: Response): Promise<void> => {
       const images = await getUserImagesUseCase(userId, imageRepository);
       console.log("Image array", images)
   
-      const serverBaseUrl = process.env.SERVER_BASE_URL || 'http://localhost:8000'; 
+      const serverBaseUrl = process.env.SERVER_BASE_URL || 'https://picbackend.onrender.com'; 
       const fullImagePaths = images.map((image) => ({
         id:image.id,
         title: image.title,
