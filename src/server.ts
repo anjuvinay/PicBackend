@@ -22,7 +22,7 @@ const PORT = process.env.PORT || 8000;
 app.use(
   cors({
     credentials: true,
-    origin: "https://pic-stack-4bfq.vercel.app/",
+    origin: "https://pic-stack-4bfq.vercel.app",
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
   })
 );
