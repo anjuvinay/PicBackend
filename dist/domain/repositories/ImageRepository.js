@@ -55,18 +55,18 @@ class ImageRepository {
                 updateData.title = title;
             if (imagePath)
                 updateData.imagePath = imagePath;
-            const updatedDoc = yield ImageModel_1.default.findOneAndUpdate({ _id: id, userId }, updateData, { new: true }).exec();
-            if (!updatedDoc) {
-                return null;
-            }
-            return {
-                id: updatedDoc.id,
-                userId: updatedDoc.userId,
-                title: updatedDoc.title,
-                imagePath: updatedDoc.imagePath,
-                createdAt: updatedDoc.createdAt,
-                updatedAt: updatedDoc.updatedAt,
-            };
+            const updatedDoc = yield ImageModel_1.default.findOneAndUpdate({ _id: id, userId }, updateData, { new: true } // Return the updated document
+            ).exec();
+            return updatedDoc
+                ? {
+                    id: updatedDoc._id.toString(), // Explicitly cast `_id` to string
+                    userId: updatedDoc.userId,
+                    title: updatedDoc.title,
+                    imagePath: updatedDoc.imagePath,
+                    createdAt: updatedDoc.createdAt,
+                    updatedAt: updatedDoc.updatedAt,
+                }
+                : null;
         });
     }
     updateImageOrder(images) {
@@ -78,6 +78,11 @@ class ImageRepository {
                 },
             }));
             yield ImageModel_1.default.bulkWrite(bulkOperations);
+        });
+    }
+    getImageById(id, userId) {
+        return __awaiter(this, void 0, void 0, function* () {
+            return ImageModel_1.default.findOne({ _id: id, userId }).exec();
         });
     }
 }

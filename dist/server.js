@@ -18,7 +18,7 @@ const server = (0, http_1.createServer)(app);
 const PORT = process.env.PORT || 8000;
 app.use((0, cors_1.default)({
     credentials: true,
-    origin: "http://localhost:5173",
+    origin: "https://pic-stack-4bfq.vercel.app",
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
 }));
 app.use(express_1.default.json());

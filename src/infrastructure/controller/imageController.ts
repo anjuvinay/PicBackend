@@ -4,6 +4,8 @@ import { ImageRepository } from '../../domain/repositories/ImageRepository';
 import { uploadImagesUseCase, getUserImagesUseCase, deleteUserImageUseCase, editImageUseCase, updateOrderUseCase } from '../../application/usecases/image/imageUseCases';
 import { ImageEntity } from '../../domain/entities/ImageEntity';
 import dotenv from "dotenv";
+import { v2 as cloudinary } from 'cloudinary';
+
 
 dotenv.config();
 
@@ -12,11 +14,10 @@ const imageRepository = new ImageRepository();
 
 
 
-  const uploadImages = async (req: Request, res: Response): Promise<void> =>{
-    console.log("Reached Controller")
+const uploadImages = async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = req.user?.userId;
-    console.log("UserId",userId)
+
     if (!userId) {
       res.status(401).json({ success: false, message: 'Unauthorized' });
       return;
@@ -36,11 +37,12 @@ const imageRepository = new ImageRepository();
     }
 
     if (titles.length !== files.length) {
-      res.status(400).json({ success: false, message: 'Titles do not match number of images.' });
+      res.status(400).json({ success: false, message: 'Titles do not match the number of images.' });
       return;
     }
 
-    const filePaths: string[] = files.map((file) => `uploads/${file.filename}`);
+    // Cloudinary file URLs
+    const filePaths: string[] = files.map((file: any) => file.path);
 
     const storedImages = await uploadImagesUseCase(
       { userId, filePaths, titles },
@@ -58,7 +60,8 @@ const imageRepository = new ImageRepository();
       message: error.message || 'Image upload failed.',
     });
   }
-}
+};
+
 
 
 
@@ -67,95 +70,157 @@ const imageRepository = new ImageRepository();
 
 
 const getImages = async (req: Request, res: Response): Promise<void> => {
-    try {
-      const userId = req.user?.userId; 
-  
-      if (!userId) {
-        res.status(401).json({ success: false, message: 'Unauthorized' });
-        return;
-      }
-  
-      const images = await getUserImagesUseCase(userId, imageRepository);
-      console.log("Image array", images)
-  
-      const serverBaseUrl = process.env.SERVER_BASE_URL || 'https://picbackend.onrender.com'; 
-      const fullImagePaths = images.map((image) => ({
-        id:image.id,
-        title: image.title,
-        url: `${serverBaseUrl}/${image.imagePath}`, 
-        
-      }));
-  
-      
-      res.status(200).json({
-        success: true,
-        data: fullImagePaths,
-      });
-    } catch (error: any) {
-      console.error('Error fetching images:', error);
-      res.status(500).json({
-        success: false,
-        message: error.message || 'Error fetching images.',
-      });
+  try {
+    const userId = req.user?.userId;
+
+    if (!userId) {
+      res.status(401).json({ success: false, message: 'Unauthorized' });
+      return;
     }
-  };
+
+    const images = await getUserImagesUseCase(userId, imageRepository);
+
+    // Ensure URLs are correctly set
+    const fullImagePaths = images.map((image) => ({
+      id: image.id,
+      title: image.title,
+      url: image.imagePath, // Use imagePath directly for Cloudinary images
+    }));
+
+    res.status(200).json({
+      success: true,
+      data: fullImagePaths,
+    });
+  } catch (error: any) {
+    console.error('Error fetching images:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Error fetching images.',
+    });
+  }
+};
 
 
 
-  const deleteImage = async (req: Request, res: Response): Promise<void> => {
-    try {
-      const userId = req.user?.userId;
-      const { Id } = req.body;
-      console.log("imageId or image path", Id)
-  
-      if (!userId) {
-        res.status(401).json({ success: false, message: 'Unauthorized' });
-        return;
-      }
-  
-      await deleteUserImageUseCase(Id, userId, imageRepository);
-  
-      res.status(200).json({
-        success: true,
-        message: 'Image deleted successfully',
-      });
-    } catch (error: any) {
-      console.error('Error deleting image:', error);
-      res.status(500).json({
-        success: false,
-        message: error.message || 'Image deletion failed.',
-      });
+const deleteImage = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = req.user?.userId;
+    const { id } = req.body;
+
+    if (!userId) {
+      res.status(401).json({ success: false, message: "Unauthorized" });
+      return;
     }
-  };
 
-
-
-  const editImage = async (req: Request, res: Response): Promise<void> => {
-    try {
-      const userId = req.user?.userId;
-      const { id, title } = req.body;
-      const file = (req.file as Express.Multer.File) || null;
-  
-      if (!userId || !id) {
-        res.status(400).json({ success: false, message: 'Invalid request data' });
-        return;
-      }
-  
-      const updatedImage = await editImageUseCase(id, userId, title, file, imageRepository);
-  
-      res.status(200).json({
-        success: true,
-        message: 'Image updated successfully',
-        data: updatedImage,
-      });
-    } catch (error: any) {
-      console.error('Error editing image:', error);
-      res.status(500).json({
-        success: false,
-        message: error.message || 'Image update failed',
-      });
+    if (!id) {
+      res.status(400).json({ success: false, message: "Image ID is required" });
+      return;
     }
-  };
+
+    // Fetch the image from the database
+    const image = await imageRepository.getImageById(id, userId);
+    if (!image) {
+      res.status(404).json({ success: false, message: "Image not found" });
+      return;
+    }
+
+    // Extract the publicId from the imagePath
+    const publicIdMatch = image.imagePath.match(/\/([^/]+)\.[a-z]+$/i);
+    const publicId = publicIdMatch ? publicIdMatch[1] : null;
+
+    if (!publicId) {
+      res.status(400).json({ success: false, message: "Invalid image URL or public ID" });
+      return;
+    }
+
+    // Delete the image from Cloudinary
+    await cloudinary.uploader.destroy(publicId);
+
+    // Delete the image from the database
+    await imageRepository.deleteImage(id, userId);
+
+    res.status(200).json({
+      success: true,
+      message: "Image deleted successfully",
+    });
+  } catch (error: any) {
+    console.error("Error deleting image:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message || "Image deletion failed.",
+    });
+  }
+};
+
+
+
+
+
+
+const editImage = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = req.user?.userId;
+    const { id, title } = req.body;
+    const file = req.file as Express.Multer.File | undefined; // Optional new image file
+
+    if (!userId) {
+      res.status(401).json({ success: false, message: "Unauthorized" });
+      return;
+    }
+
+    if (!id) {
+      res.status(400).json({ success: false, message: "Image ID is required" });
+      return;
+    }
+
+    // Find the image in the database
+    const image = await imageRepository.getImageById(id, userId);
+    if (!image) {
+      res.status(404).json({ success: false, message: "Image not found" });
+      return;
+    }
+
+    let updatedImagePath = image.imagePath;
+
+    // If a new file is uploaded, replace the image in Cloudinary
+    if (file) {
+      const publicIdMatch = image.imagePath.match(/\/([^/]+)\.[a-z]+$/i);
+      const publicId = publicIdMatch ? publicIdMatch[1] : null;
+
+      if (publicId) {
+        // Delete the old image from Cloudinary
+        await cloudinary.uploader.destroy(publicId);
+      }
+
+      // Upload the new image to Cloudinary
+      const uploadResult = await cloudinary.uploader.upload(file.path, {
+        folder: "picStack",
+      });
+      updatedImagePath = uploadResult.secure_url;
+    }
+
+    // Update the image in the database
+    const updatedImage = await imageRepository.updateImage(
+      id,
+      userId,
+      title,
+      updatedImagePath
+    );
+
+    res.status(200).json({
+      success: true,
+      message: "Image updated successfully",
+      data: updatedImage,
+    });
+  } catch (error: any) {
+    console.error("Error editing image:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message || "Image update failed.",
+    });
+  }
+};
+
 
 
 

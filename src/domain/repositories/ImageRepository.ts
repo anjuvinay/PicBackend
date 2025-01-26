@@ -52,22 +52,23 @@ export class ImageRepository implements IImageRepository {
     const updatedDoc = await ImageModel.findOneAndUpdate(
       { _id: id, userId },
       updateData,
-      { new: true }
+      { new: true } // Return the updated document
     ).exec();
   
-    if (!updatedDoc) {
-      return null;
-    }
-  
-    return {
-      id: updatedDoc.id,
-      userId: updatedDoc.userId,
-      title: updatedDoc.title,
-      imagePath: updatedDoc.imagePath,
-      createdAt: updatedDoc.createdAt,
-      updatedAt: updatedDoc.updatedAt,
-    };
+    return updatedDoc
+      ? {
+          id: (updatedDoc._id as any).toString(), // Explicitly cast `_id` to string
+          userId: updatedDoc.userId,
+          title: updatedDoc.title,
+          imagePath: updatedDoc.imagePath,
+          createdAt: updatedDoc.createdAt,
+          updatedAt: updatedDoc.updatedAt,
+        }
+      : null;
   }
+  
+  
+  
 
   
 
@@ -84,9 +85,16 @@ export class ImageRepository implements IImageRepository {
   }
 
 
+
+  public async getImageById(id: string, userId: string): Promise<ImageEntity | null> {
+    return ImageModel.findOne({ _id: id, userId }).exec();
+  }
   
-  
-  
+
+
 
   
 }
+
+
+

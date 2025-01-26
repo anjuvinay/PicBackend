@@ -15,14 +15,13 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const ImageRepository_1 = require("../../domain/repositories/ImageRepository");
 const imageUseCases_1 = require("../../application/usecases/image/imageUseCases");
 const dotenv_1 = __importDefault(require("dotenv"));
+const cloudinary_1 = require("cloudinary");
 dotenv_1.default.config();
 const imageRepository = new ImageRepository_1.ImageRepository();
 const uploadImages = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     var _a;
-    console.log("Reached Controller");
     try {
         const userId = (_a = req.user) === null || _a === void 0 ? void 0 : _a.userId;
-        console.log("UserId", userId);
         if (!userId) {
             res.status(401).json({ success: false, message: 'Unauthorized' });
             return;
@@ -40,10 +39,11 @@ const uploadImages = (req, res) => __awaiter(void 0, void 0, void 0, function* (
             titles = [titles];
         }
         if (titles.length !== files.length) {
-            res.status(400).json({ success: false, message: 'Titles do not match number of images.' });
+            res.status(400).json({ success: false, message: 'Titles do not match the number of images.' });
             return;
         }
-        const filePaths = files.map((file) => `uploads/${file.filename}`);
+        // Cloudinary file URLs
+        const filePaths = files.map((file) => file.path);
         const storedImages = yield (0, imageUseCases_1.uploadImagesUseCase)({ userId, filePaths, titles }, imageRepository);
         res.status(200).json({
             success: true,
@@ -67,12 +67,11 @@ const getImages = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
             return;
         }
         const images = yield (0, imageUseCases_1.getUserImagesUseCase)(userId, imageRepository);
-        console.log("Image array", images);
-        const serverBaseUrl = process.env.SERVER_BASE_URL || 'http://localhost:8000';
+        // Ensure URLs are correctly set
         const fullImagePaths = images.map((image) => ({
             id: image.id,
             title: image.title,
-            url: `${serverBaseUrl}/${image.imagePath}`,
+            url: image.imagePath, // Use imagePath directly for Cloudinary images
         }));
         res.status(200).json({
             success: true,
@@ -91,23 +90,42 @@ const deleteImage = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
     var _a;
     try {
         const userId = (_a = req.user) === null || _a === void 0 ? void 0 : _a.userId;
-        const { Id } = req.body;
-        console.log("imageId or image path", Id);
+        const { id } = req.body;
         if (!userId) {
-            res.status(401).json({ success: false, message: 'Unauthorized' });
+            res.status(401).json({ success: false, message: "Unauthorized" });
             return;
         }
-        yield (0, imageUseCases_1.deleteUserImageUseCase)(Id, userId, imageRepository);
+        if (!id) {
+            res.status(400).json({ success: false, message: "Image ID is required" });
+            return;
+        }
+        // Fetch the image from the database
+        const image = yield imageRepository.getImageById(id, userId);
+        if (!image) {
+            res.status(404).json({ success: false, message: "Image not found" });
+            return;
+        }
+        // Extract the publicId from the imagePath
+        const publicIdMatch = image.imagePath.match(/\/([^/]+)\.[a-z]+$/i);
+        const publicId = publicIdMatch ? publicIdMatch[1] : null;
+        if (!publicId) {
+            res.status(400).json({ success: false, message: "Invalid image URL or public ID" });
+            return;
+        }
+        // Delete the image from Cloudinary
+        yield cloudinary_1.v2.uploader.destroy(publicId);
+        // Delete the image from the database
+        yield imageRepository.deleteImage(id, userId);
         res.status(200).json({
             success: true,
-            message: 'Image deleted successfully',
+            message: "Image deleted successfully",
         });
     }
     catch (error) {
-        console.error('Error deleting image:', error);
+        console.error("Error deleting image:", error);
         res.status(500).json({
             success: false,
-            message: error.message || 'Image deletion failed.',
+            message: error.message || "Image deletion failed.",
         });
     }
 });
@@ -116,23 +134,49 @@ const editImage = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const userId = (_a = req.user) === null || _a === void 0 ? void 0 : _a.userId;
         const { id, title } = req.body;
-        const file = req.file || null;
-        if (!userId || !id) {
-            res.status(400).json({ success: false, message: 'Invalid request data' });
+        const file = req.file; // Optional new image file
+        if (!userId) {
+            res.status(401).json({ success: false, message: "Unauthorized" });
             return;
         }
-        const updatedImage = yield (0, imageUseCases_1.editImageUseCase)(id, userId, title, file, imageRepository);
+        if (!id) {
+            res.status(400).json({ success: false, message: "Image ID is required" });
+            return;
+        }
+        // Find the image in the database
+        const image = yield imageRepository.getImageById(id, userId);
+        if (!image) {
+            res.status(404).json({ success: false, message: "Image not found" });
+            return;
+        }
+        let updatedImagePath = image.imagePath;
+        // If a new file is uploaded, replace the image in Cloudinary
+        if (file) {
+            const publicIdMatch = image.imagePath.match(/\/([^/]+)\.[a-z]+$/i);
+            const publicId = publicIdMatch ? publicIdMatch[1] : null;
+            if (publicId) {
+                // Delete the old image from Cloudinary
+                yield cloudinary_1.v2.uploader.destroy(publicId);
+            }
+            // Upload the new image to Cloudinary
+            const uploadResult = yield cloudinary_1.v2.uploader.upload(file.path, {
+                folder: "picStack",
+            });
+            updatedImagePath = uploadResult.secure_url;
+        }
+        // Update the image in the database
+        const updatedImage = yield imageRepository.updateImage(id, userId, title, updatedImagePath);
         res.status(200).json({
             success: true,
-            message: 'Image updated successfully',
+            message: "Image updated successfully",
             data: updatedImage,
         });
     }
     catch (error) {
-        console.error('Error editing image:', error);
+        console.error("Error editing image:", error);
         res.status(500).json({
             success: false,
-            message: error.message || 'Image update failed',
+            message: error.message || "Image update failed.",
         });
     }
 });
