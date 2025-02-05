@@ -52,12 +52,12 @@ export class ImageRepository implements IImageRepository {
     const updatedDoc = await ImageModel.findOneAndUpdate(
       { _id: id, userId },
       updateData,
-      { new: true } // Return the updated document
+      { new: true } 
     ).exec();
   
     return updatedDoc
       ? {
-          id: (updatedDoc._id as any).toString(), // Explicitly cast `_id` to string
+          id: (updatedDoc._id as any).toString(), 
           userId: updatedDoc.userId,
           title: updatedDoc.title,
           imagePath: updatedDoc.imagePath,
@@ -77,7 +77,7 @@ export class ImageRepository implements IImageRepository {
     const bulkOperations = images.map((image, index) => ({
       updateOne: {
         filter: { _id: image.id, userId: image.userId },
-        update: { $set: { order: index + 1 } }, // Use `index + 1` for new order
+        update: { $set: { order: index + 1 } }, 
       },
     }));
   

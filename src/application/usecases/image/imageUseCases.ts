@@ -99,7 +99,6 @@ export async function deleteUserImageUseCase(
     console.log("Authenticated UserId:", userId);
     console.log("Reordered Images:", reorderedImages);
   
-    // Check if all images belong to the authenticated user
     for (const image of reorderedImages) {
       console.log(`Validating image ${image.id}: userId=${image.userId}`);
       if (image.userId !== userId) {
@@ -108,7 +107,7 @@ export async function deleteUserImageUseCase(
       }
     }
   
-    // Proceed to update the image order in the repository
+    
     await imageRepository.updateImageOrder(reorderedImages);
   }
   
